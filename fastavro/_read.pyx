@@ -896,6 +896,34 @@ except ImportError:
 else:
     BLOCK_READERS["lz4"] = lz4_read_block
 
+def count_avro_records(
+    fo,
+    header,
+    codec,
+    writer_schema,
+    named_schemas,
+    reader_schema,
+):
+    cdef int32 i
+
+    sync_marker = header["sync"]
+
+    read_block = BLOCK_READERS.get(codec)
+    if not read_block:
+        raise ValueError(f"Unrecognized codec: {codec}")
+
+    block_count = 0
+    fo_loc = fo.tell()
+
+    while True:
+        try:
+            block_count += read_long(fo)
+            fo.seek(read_long(fo), 1)
+            skip_sync(fo, sync_marker)
+        except StopIteration:
+            break
+    fo.seek(fo_loc, 0)
+    return block_count
 
 def _iter_avro_records(
     fo,
