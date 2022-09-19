@@ -1059,7 +1059,15 @@ class file_reader:
         return next(self._elems)
 
     def readall(self):
-        return list(self._elems)
+        first_record = next(self._elems)
+        if not first_record:
+            return first_record
+        records = {key: [item] for key, item in first_record.items()}
+        for record in self._elems:
+            for key, item in record.items():
+                records[key].append(item)
+        return records
+
 
 
 class reader(file_reader):
