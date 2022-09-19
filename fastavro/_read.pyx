@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from decimal import Context
 from io import BytesIO
 
+import numpy as np
+
 import json
 
 from .logical_readers import LOGICAL_READERS
@@ -1058,16 +1060,33 @@ class file_reader:
     def __next__(self):
         return next(self._elems)
 
-    def readall(self):
-        first_record = next(self._elems)
-        if not first_record:
-            return first_record
-        records = {key: [item] for key, item in first_record.items()}
-        for record in self._elems:
-            for key, item in record.items():
-                records[key].append(item)
-        return records
+    def read_chunk(self, chunk=1000):
+        records = {}
+        for item in self.writer_schema["fields"]:
+            datatype = item["type"]
+            if isinstance(datatype, dict):
+                if datatype["type"] == "array":
+                    records[item["name"]] = datatype["items"]
+                    continue
+                elif datatype["type"] == "enum":
+                    records[item["name"]] = np.chararray((chunk,), itemsize=max(map(len, datatype["symbols"])), unicode=True)
+                    continue
+                raise NotImplementedError("Only array supported for custom types")
+            else:
+                records[item["name"]] = np.zeros((chunk,), dtype=datatype)
+        
+        for key, values in next(self._elems).items():
+            if isinstance(records[key], str):
+                records[key] = np.zeros((chunk,len(values)), dtype=records[key])
+            records[key][0] += values
 
+        for i, item in enumerate(self._elems, 1):
+            for key, values in item.items():
+                records[key][i] += values
+            if i >= (chunk-1):
+                break
+
+        return records
 
 
 class reader(file_reader):
