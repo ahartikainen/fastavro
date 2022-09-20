@@ -1112,7 +1112,7 @@ class file_reader:
     def count_records(self):
         current_location = self.fo.tell()
         self.fo.seek(self._data_start_location)
-        count_value = _count_avro_records(self.fo, self.writer_schema)
+        count_value = _count_avro_records(self.fo, self._header)
         self.fo.seek(current_location)
         return count_value
 
