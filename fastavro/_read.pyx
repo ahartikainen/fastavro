@@ -1081,8 +1081,10 @@ class file_reader:
     def __next__(self):
         return next(self._elems)
 
-    def read_chunk(self, chunk=1000):
+    def read_chunk(self, chunk=-1):
         records = {}
+        if chunk <= 0:
+            chunk = self.count_records()
         for item in self.writer_schema["fields"]:
             datatype = item["type"]
             if isinstance(datatype, dict):
