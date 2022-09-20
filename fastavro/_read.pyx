@@ -353,6 +353,7 @@ cpdef read_array(
     read_items = []
 
     block_count = read_long(fo)
+    print(block_count)
 
     while block_count != 0:
         if block_count < 0:
