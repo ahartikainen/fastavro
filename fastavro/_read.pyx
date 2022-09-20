@@ -896,21 +896,13 @@ except ImportError:
 else:
     BLOCK_READERS["lz4"] = lz4_read_block
 
-def count_avro_records(
+def _count_avro_records(
     fo,
     header,
-    codec,
-    writer_schema,
-    named_schemas,
-    reader_schema,
 ):
-    cdef int32 i
-
+    if not fo.seekable():
+        raise ValueError("Fileobject is not seekable, counting cannot not be done")
     sync_marker = header["sync"]
-
-    read_block = BLOCK_READERS.get(codec)
-    if not read_block:
-        raise ValueError(f"Unrecognized codec: {codec}")
 
     block_count = 0
     fo_loc = fo.tell()
@@ -1070,6 +1062,7 @@ class file_reader:
         )
 
         self._elems = None
+        self._data_start_location = self.fo.tell()
 
     @property
     def schema(self):
@@ -1115,6 +1108,13 @@ class file_reader:
                 break
 
         return records
+    
+    def count_records(self):
+        current_location = self.fo.tell()
+        self.fo.seek(self._data_start_location)
+        count_value = _count_avro_records(self.fo, self.writer_schema)
+        self.fo.seek(current_location)
+        return count_value
 
 
 class reader(file_reader):
