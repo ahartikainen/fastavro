@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from decimal import Context
 from io import BytesIO
 
+import numpy as np
+
 import json
 
 from .logical_readers import LOGICAL_READERS
@@ -894,6 +896,26 @@ except ImportError:
 else:
     BLOCK_READERS["lz4"] = lz4_read_block
 
+def _count_avro_records(
+    fo,
+    header,
+):
+    if not fo.seekable():
+        raise ValueError("Fileobject is not seekable, counting cannot not be done")
+    sync_marker = header["sync"]
+
+    block_count = 0
+    fo_loc = fo.tell()
+
+    while True:
+        try:
+            block_count += read_long(fo)
+            fo.seek(read_long(fo), 1)
+            skip_sync(fo, sync_marker)
+        except StopIteration:
+            break
+    fo.seek(fo_loc, 0)
+    return block_count
 
 def _iter_avro_records(
     fo,
@@ -1040,6 +1062,7 @@ class file_reader:
         )
 
         self._elems = None
+        self._data_start_location = self.fo.tell()
 
     @property
     def schema(self):
@@ -1057,6 +1080,43 @@ class file_reader:
 
     def __next__(self):
         return next(self._elems)
+
+    def read_chunk(self, chunk=-1):
+        records = {}
+        if chunk <= 0:
+            chunk = self.count_records()
+        for item in self.writer_schema["fields"]:
+            datatype = item["type"]
+            if isinstance(datatype, dict):
+                if datatype["type"] == "array":
+                    records[item["name"]] = datatype["items"]
+                    continue
+                elif datatype["type"] == "enum":
+                    records[item["name"]] = np.chararray((chunk,), itemsize=max(map(len, datatype["symbols"])), unicode=True)
+                    continue
+                raise NotImplementedError("Only array supported for custom types")
+            else:
+                records[item["name"]] = np.zeros((chunk,), dtype=datatype)
+        
+        for key, values in next(self._elems).items():
+            if isinstance(records[key], str):
+                records[key] = np.zeros((chunk,len(values)), dtype=records[key])
+            records[key][0] += values
+
+        for i, item in enumerate(self._elems, 1):
+            for key, values in item.items():
+                records[key][i] += values
+            if i >= (chunk-1):
+                break
+
+        return records
+    
+    def count_records(self):
+        current_location = self.fo.tell()
+        self.fo.seek(self._data_start_location)
+        count_value = _count_avro_records(self.fo, self._header)
+        self.fo.seek(current_location)
+        return count_value
 
 
 class reader(file_reader):
