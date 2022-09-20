@@ -5,9 +5,6 @@ on:
   push:
     branches:
       - '**'
-  pull_request:
-  schedule:
-    - cron: "0 8 * * *"
 
 jobs:
   test:
@@ -16,11 +13,7 @@ jobs:
     strategy:
       matrix:
         py:
-          - 3.10.0
           - 3.9
-          - 3.8
-          - 3.7
-          - pypy-3.7
     steps:
       - name: Setup Python for test ${{ matrix.py }}
         uses: actions/setup-python@v4
